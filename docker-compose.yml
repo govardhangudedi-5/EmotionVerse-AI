@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: emotionverse_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_NAME=EmotionVerse AI
+      - APP_VERSION=1.0.0
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - DEMO_MODE=false
+      - DATABASE_URL=sqlite:///./emotionverse.db
+    volumes:
+      - ./backend/emotionverse.db:/app/emotionverse.db
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: emotionverse_frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

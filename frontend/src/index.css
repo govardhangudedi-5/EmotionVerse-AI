@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #070913;
+    background-image: 
+      radial-gradient(circle at 15% 15%, rgba(0, 240, 255, 0.08) 0%, transparent 35%),
+      radial-gradient(circle at 85% 20%, rgba(168, 85, 247, 0.08) 0%, transparent 35%),
+      radial-gradient(circle at 50% 80%, rgba(59, 130, 246, 0.06) 0%, transparent 40%);
+    background-attachment: fixed;
+  }
+}
+
+/* Glassmorphism Card System */
+.glass-card {
+  background: rgba(16, 22, 46, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card:hover {
+  border-color: rgba(0, 240, 255, 0.25);
+  box-shadow: 0 12px 40px 0 rgba(0, 240, 255, 0.1);
+}
+
+.glass-panel {
+  background: rgba(12, 16, 34, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Cyber Accents & Neon Gradients */
+.neon-glow-cyan {
+  text-shadow: 0 0 12px rgba(0, 240, 255, 0.6);
+}
+
+.neon-glow-purple {
+  text-shadow: 0 0 12px rgba(168, 85, 247, 0.6);
+}
+
+.gradient-text-cyber {
+  background: linear-gradient(135deg, #00f0ff 0%, #3b82f6 50%, #a855f7 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gradient-text-gold {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #d97706 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Custom Sleek Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #070913;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1d2752;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #00f0ff;
+}
