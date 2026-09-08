@@ -1,0 +1,46 @@
+services:
+  # 1. FastAPI Backend Core Engine
+  - type: web
+    name: emotionverse-backend
+    runtime: python
+    region: oregon
+    plan: free
+    branch: main
+    rootDir: backend
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: APP_NAME
+        value: "EmotionVerse AI"
+      - key: APP_VERSION
+        value: "1.0.0"
+      - key: ENVIRONMENT
+        value: "production"
+      - key: DEBUG
+        value: "false"
+      - key: DEMO_MODE
+        value: "false"
+      - key: DATABASE_URL
+        value: "sqlite:///./emotionverse.db"
+
+  # 2. React + Vite Frontend Dashboard
+  - type: web
+    name: emotionverse-frontend
+    runtime: static
+    region: oregon
+    plan: free
+    branch: main
+    rootDir: frontend
+    buildCommand: "npm install && npm run build"
+    staticPublishPath: "./dist"
+    routes:
+      - type: rewrite
+        source: "/*"
+        destination: "/index.html"
+    envVars:
+      - key: VITE_API_BASE
+        fromService:
+          type: web
+          name: emotionverse-backend
+          property: host
+          path: /api
