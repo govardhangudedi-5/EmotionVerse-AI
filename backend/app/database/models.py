@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey
 from sqlalchemy.orm import relationship
 from .session import Base
@@ -10,8 +10,8 @@ class UserSession(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     session_id = Column(String(64), unique=True, index=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    last_active_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    last_active_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     analyses = relationship("EmotionAnalysis", back_populates="session", cascade="all, delete-orphan")
 
@@ -21,7 +21,7 @@ class EmotionAnalysis(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     session_id = Column(String(64), ForeignKey("user_sessions.session_id"), index=True, nullable=False)
-    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     context_mode = Column(String(32), default="education")
 
     # Modality-level summary

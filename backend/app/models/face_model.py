@@ -171,19 +171,20 @@ class FaceEmotionModel(BaseEmotionModel):
         # Feature-based scoring
         f = self._extract_facial_heuristics(features)
 
-        # Baseline scores
+        # Calibrated baseline scores: Neutral is dominant when resting,
+        # Happy triggers on significant mouth expansion/variance
         scores = {
-            "happy": 0.10 + 1.2 * max(0.0, f["mouth_std"] - 0.18),
-            "neutral": 0.25 + 0.5 * (0.20 - min(0.20, f["brow_tension"])),
-            "sad": 0.10 + 0.8 * max(0.0, 0.18 - f["mouth_mean"]),
-            "angry": 0.08 + 1.5 * max(0.0, f["brow_tension"] - 0.15),
-            "fear": 0.08 + 1.0 * max(0.0, f["eye_variance"] - 0.22) * (1.0 + f["brow_tension"]),
-            "surprise": 0.08 + 1.6 * max(0.0, f["eye_variance"] - 0.24) * max(0.0, f["mouth_mean"] - 0.35),
-            "disgust": 0.06 + 0.8 * max(0.0, f["brow_tension"] - 0.12) * max(0.0, 0.2 - f["mouth_std"]),
+            "neutral": 0.55 + 0.3 * (0.20 - min(0.20, f["brow_tension"])),
+            "happy": 0.05 + 1.8 * max(0.0, f["mouth_std"] - 0.22),
+            "sad": 0.06 + 1.0 * max(0.0, 0.16 - f["mouth_mean"]),
+            "angry": 0.06 + 2.0 * max(0.0, f["brow_tension"] - 0.16),
+            "fear": 0.05 + 1.2 * max(0.0, f["eye_variance"] - 0.23) * (1.0 + f["brow_tension"]),
+            "surprise": 0.05 + 2.2 * max(0.0, f["eye_variance"] - 0.25) * max(0.0, f["mouth_mean"] - 0.35),
+            "disgust": 0.04 + 1.0 * max(0.0, f["brow_tension"] - 0.14) * max(0.0, 0.2 - f["mouth_std"]),
         }
 
         # Softmax normalization
-        exp_vals = {k: np.exp(v * 2.5) for k, v in scores.items()}
+        exp_vals = {k: np.exp(v * 2.8) for k, v in scores.items()}
         total = sum(exp_vals.values())
         probs = {k: round(float(v / total), 4) for k, v in exp_vals.items()}
 

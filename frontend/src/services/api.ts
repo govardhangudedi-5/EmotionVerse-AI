@@ -7,6 +7,7 @@ import {
   MultimodalFusionResponse,
   TextAnalysisResponse,
 } from "../types/emotion";
+import { convertBlobToWav } from "../utils/audioEncoder";
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string) || (
   typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
@@ -55,10 +56,21 @@ export async function analyzeFaceBase64(image_base64: string): Promise<FaceAnaly
   return res.json();
 }
 
-export async function analyzeAudio(audioBlob: Blob): Promise<AudioAnalysisResponse> {
+export async function analyzeAudio(
+  audioBlob: Blob,
+  transcript?: string,
+  mode: "combined" | "acoustic" = "combined"
+): Promise<AudioAnalysisResponse> {
+  // Convert browser-recorded audio (WebM/Opus/OGG) to standard 16kHz PCM WAV
+  const wavBlob = await convertBlobToWav(audioBlob, 16000);
   const formData = new FormData();
-  const file = new File([audioBlob], "recording.wav", { type: audioBlob.type || "audio/wav" });
+  const file = new File([wavBlob], "recording.wav", { type: "audio/wav" });
   formData.append("file", file);
+
+  if (transcript && transcript.trim()) {
+    formData.append("transcript", transcript.trim());
+  }
+  formData.append("mode", mode);
 
   const res = await fetch(`${API_BASE}/analyze/audio`, {
     method: "POST",

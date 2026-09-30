@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
 from .emotion import EngagementLevel, MoodCategory, ContextMode, RecommendationItem
 
 
@@ -40,6 +40,12 @@ class AnalysisRecordResponse(BaseModel):
     agreement_score: float
     modalities_used: List[str]
     notes: Optional[str] = None
+
+    @field_serializer("timestamp")
+    def serialize_timestamp(self, dt: datetime, _info) -> str:
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
 
     class Config:
         from_attributes = True

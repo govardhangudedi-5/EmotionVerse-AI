@@ -1,12 +1,15 @@
 import logging
 from contextlib import asynccontextmanager
+import os
+from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .database.session import init_db
-from .api.routes import health_router, analyze_router, analysis_router
+from .api.routes import health_router, analyze_router, analysis_router, direct_alias_router
 
 # Configure logging
 logging.basicConfig(
@@ -52,19 +55,38 @@ app.add_middleware(
 # Register API Routers
 app.include_router(health_router, prefix=settings.API_PREFIX)
 app.include_router(analyze_router, prefix=settings.API_PREFIX)
+app.include_router(direct_alias_router, prefix=settings.API_PREFIX)
 app.include_router(analysis_router, prefix=settings.API_PREFIX)
 
+# Serve Frontend static assets and SPA pages
+FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 
-@app.get("/")
-def root_redirect():
-    """Root landing endpoint with system information and link to OpenAPI docs."""
-    return {
-        "name": settings.APP_NAME,
-        "version": settings.APP_VERSION,
-        "docs_url": "/docs",
-        "api_health": f"{settings.API_PREFIX}/health",
-        "message": "Welcome to EmotionVerse AI Multi-Modal Engine",
-    }
+if FRONTEND_DIST.exists():
+    assets_dir = FRONTEND_DIST / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+
+    @app.get("/")
+    async def serve_root():
+        return FileResponse(str(FRONTEND_DIST / "index.html"))
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        file_path = FRONTEND_DIST / full_path
+        if file_path.is_file():
+            return FileResponse(str(file_path))
+        return FileResponse(str(FRONTEND_DIST / "index.html"))
+else:
+    @app.get("/")
+    def root_redirect():
+        """Root landing endpoint with system information and link to OpenAPI docs."""
+        return {
+            "name": settings.APP_NAME,
+            "version": settings.APP_VERSION,
+            "docs_url": "/docs",
+            "api_health": f"{settings.API_PREFIX}/health",
+            "message": "Welcome to EmotionVerse AI Multi-Modal Engine",
+        }
 
 
 @app.exception_handler(Exception)

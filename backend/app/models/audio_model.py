@@ -63,64 +63,84 @@ class AudioEmotionModel(BaseEmotionModel):
 
     def _extract_acoustic_features(self, y: np.ndarray, sr: int) -> Dict[str, float]:
         """
-        Extract key prosodic and spectral metrics from audio signal.
+        Extract robust prosodic, harmonic, and spectral metrics across all voiced portions of the audio signal.
         """
         if len(y) == 0:
             return {
                 "rms_energy": 0.0,
                 "zcr": 0.0,
-                "pitch_mean": 150.0,
+                "pitch_mean": 160.0,
                 "pitch_std": 0.0,
                 "spectral_centroid": 1000.0,
                 "spectral_flux": 0.0,
             }
 
-        # 1. RMS Energy
-        rms = float(np.sqrt(np.mean(y ** 2)))
+        # 1. Overall RMS Energy
+        overall_rms = float(np.sqrt(np.mean(y ** 2)))
 
-        # 2. Zero Crossing Rate
-        zero_crossings = np.sum(np.abs(np.diff(np.sign(y)))) / (2 * len(y))
-        zcr = float(zero_crossings)
-
-        # 3. Autocorrelation-based pitch estimation (fundamental frequency F0)
-        # Search range: 60Hz to 400Hz (human vocal range)
-        min_lag = int(sr / 400)
-        max_lag = int(sr / 60)
-        corr_len = min(len(y), int(sr * 0.5))  # analyze up to 0.5s chunks
-        corr = np.correlate(y[:corr_len], y[:corr_len], mode="full")
-        corr = corr[len(corr) // 2 :]
-
-        if len(corr) > max_lag:
-            lag = min_lag + np.argmax(corr[min_lag:max_lag])
-            pitch_f0 = float(sr / lag) if lag > 0 else 160.0
-        else:
-            pitch_f0 = 160.0
-
-        # Estimate pitch variation across multiple 50ms frames
+        # 2. Windowed analysis across the entire recording (50ms window, 25ms step)
         frame_len = int(sr * 0.05)
-        num_frames = min(20, len(y) // frame_len)
+        hop_len = int(sr * 0.025)
+        num_frames = (len(y) - frame_len) // hop_len
+
+        min_lag = int(sr / 450)  # ~450 Hz upper voice bound
+        max_lag = int(sr / 65)   # ~65 Hz lower voice bound
+
+        frame_rms_list = []
         pitches = []
-        for i in range(num_frames):
-            frame = y[i * frame_len : (i + 1) * frame_len]
-            if len(frame) > 0 and np.std(frame) > 0.01:
-                frame_corr = np.correlate(frame, frame, mode="full")
-                frame_corr = frame_corr[len(frame_corr) // 2 :]
-                if len(frame_corr) > max_lag:
-                    sub_lag = min_lag + np.argmax(frame_corr[min_lag:max_lag])
-                    if sub_lag > 0:
-                        pitches.append(sr / sub_lag)
+        zcrs = []
 
-        pitch_std = float(np.std(pitches)) if len(pitches) > 1 else 15.0
+        if num_frames > 0:
+            # Sample up to 80 frames uniformly across the entire recording
+            step = max(1, num_frames // 80)
+            for i in range(0, num_frames, step):
+                start = i * hop_len
+                frame = y[start : start + frame_len]
+                if len(frame) < max_lag + 10:
+                    continue
 
-        # 4. Spectral Centroid
-        freqs, times, Sxx = spectrogram(y, fs=sr, nperseg=min(512, len(y)))
-        centroid_per_frame = np.sum(freqs[:, np.newaxis] * Sxx, axis=0) / (np.sum(Sxx, axis=0) + 1e-9)
-        spectral_centroid = float(np.mean(centroid_per_frame))
+                f_rms = float(np.sqrt(np.mean(frame ** 2)))
+                frame_rms_list.append(f_rms)
+
+                # Analyze voiced speech frames (ignore pure silence/breathing)
+                if f_rms > 0.015:
+                    zc = np.sum(np.abs(np.diff(np.sign(frame)))) / (2 * len(frame))
+                    zcrs.append(zc)
+
+                    corr = np.correlate(frame, frame, mode="full")
+                    corr = corr[len(corr) // 2 :]
+                    if len(corr) > max_lag:
+                        sub_corr = corr[min_lag:max_lag]
+                        peak_offset = np.argmax(sub_corr)
+                        lag = min_lag + peak_offset
+                        # Check periodicity significance
+                        if corr[0] > 0 and (corr[lag] / corr[0]) > 0.22:
+                            f0 = float(sr / lag)
+                            if 65.0 <= f0 <= 450.0:
+                                pitches.append(f0)
+
+        voiced_rms_values = [r for r in frame_rms_list if r > 0.015]
+        active_rms = float(np.mean(voiced_rms_values)) if voiced_rms_values else overall_rms
+        pitch_mean = float(np.median(pitches)) if len(pitches) > 0 else 160.0
+        pitch_std = float(np.std(pitches)) if len(pitches) > 1 else (18.0 if len(pitches) == 1 else 6.0)
+        mean_zcr = float(np.mean(zcrs)) if len(zcrs) > 0 else 0.05
+
+        # 3. Spectral Centroid
+        try:
+            n_seg = min(512, len(y))
+            if n_seg >= 64:
+                freqs, times, Sxx = spectrogram(y, fs=sr, nperseg=n_seg)
+                centroid_per_frame = np.sum(freqs[:, np.newaxis] * Sxx, axis=0) / (np.sum(Sxx, axis=0) + 1e-9)
+                spectral_centroid = float(np.mean(centroid_per_frame))
+            else:
+                spectral_centroid = 1500.0
+        except Exception:
+            spectral_centroid = 1500.0
 
         return {
-            "rms_energy": rms,
-            "zcr": zcr,
-            "pitch_mean": pitch_f0,
+            "rms_energy": active_rms,
+            "zcr": mean_zcr,
+            "pitch_mean": pitch_mean,
             "pitch_std": pitch_std,
             "spectral_centroid": spectral_centroid,
         }
@@ -154,20 +174,51 @@ class AudioEmotionModel(BaseEmotionModel):
 
         # Baseline scores mapped to acoustic properties
         scores = {
-            # Happy: high pitch variation, bright centroid, moderate-high energy
-            "happy": 0.12 + 1.2 * min(1.0, pitch_std / 35.0) + 0.8 * min(1.0, rms / 0.20),
+            # Happy: elevated pitch (180-300Hz), high pitch modulation/variance, bright centroid, good energy
+            "happy": (
+                0.10
+                + 1.3 * min(1.0, max(0.0, (pitch - 155.0) / 95.0))
+                + 1.4 * min(1.0, pitch_std / 28.0)
+                + 0.9 * min(1.0, rms / 0.12)
+            ),
             # Angry: very high energy, elevated pitch, high spectral centroid
-            "angry": 0.08 + 1.8 * max(0.0, (rms - 0.15) / 0.20) + 0.8 * max(0.0, (sc - 1800) / 1000),
-            # Sad: low energy, low pitch variation, low centroid
-            "sad": 0.10 + 1.5 * max(0.0, (0.08 - rms) / 0.08) + 1.0 * max(0.0, (15.0 - pitch_std) / 15.0),
-            # Neutral: moderate energy, stable pitch, typical voice range
-            "neutral": 0.22 + 1.0 * max(0.0, 1.0 - abs(pitch - 160.0) / 80.0) * max(0.0, 1.0 - abs(rms - 0.08) / 0.08),
+            "angry": (
+                0.08
+                + 1.8 * max(0.0, (rms - 0.14) / 0.18)
+                + 0.9 * max(0.0, (sc - 1800.0) / 1000.0)
+            ),
+            # Sad: low energy, flat monotone pitch, lower pitch mean
+            "sad": (
+                0.10
+                + 1.6 * max(0.0, (0.07 - rms) / 0.07)
+                + 1.3 * max(0.0, (14.0 - pitch_std) / 14.0)
+                + 0.5 * max(0.0, (150.0 - pitch) / 60.0)
+            ),
+            # Neutral: moderate energy, stable pitch, moderate/low pitch variation
+            "neutral": (
+                0.18
+                + 0.9 * max(0.0, 1.0 - abs(pitch - 150.0) / 70.0)
+                * max(0.0, 1.0 - abs(rms - 0.06) / 0.06)
+                * max(0.0, 1.0 - pitch_std / 25.0)
+            ),
             # Fear: elevated pitch, moderate jitter, high pitch_std with lower energy than anger
-            "fear": 0.08 + 1.2 * max(0.0, (pitch - 220.0) / 100.0) + 0.8 * min(1.0, zcr / 0.15),
-            # Surprise: sudden high energy burst with very high pitch
-            "surprise": 0.08 + 1.4 * max(0.0, (pitch - 240.0) / 100.0) + 0.6 * min(1.0, rms / 0.25),
+            "fear": (
+                0.08
+                + 1.2 * max(0.0, (pitch - 220.0) / 100.0)
+                + 0.8 * min(1.0, zcr / 0.15)
+            ),
+            # Surprise: sudden high energy burst with very high pitch spike
+            "surprise": (
+                0.08
+                + 1.5 * max(0.0, (pitch - 240.0) / 100.0)
+                + 0.8 * min(1.0, rms / 0.22)
+            ),
             # Disgust: low-mid pitch, harsh spectral friction / low energy
-            "disgust": 0.06 + 0.8 * max(0.0, 1.0 - pitch / 150.0) * min(1.0, zcr / 0.10),
+            "disgust": (
+                0.06
+                + 0.8 * max(0.0, 1.0 - pitch / 140.0)
+                + 0.5 * min(1.0, zcr / 0.12)
+            ),
         }
 
         # Softmax normalization

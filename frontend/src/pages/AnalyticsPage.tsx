@@ -24,6 +24,7 @@ import {
 } from "recharts";
 import { AnalysisHistoryStats, AnalysisRecord, EMOTION_META, EmotionType } from "../types/emotion";
 import { deleteAnalysis, fetchHistory, fetchStats } from "../services/api";
+import { formatRecordDateTime, parseUtcDate } from "../utils/dateUtils";
 
 export const AnalyticsPage: React.FC = () => {
   const [history, setHistory] = useState<AnalysisRecord[]>([]);
@@ -80,7 +81,7 @@ export const AnalyticsPage: React.FC = () => {
     .reverse()
     .map((record, index) => ({
       index: index + 1,
-      time: new Date(record.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      time: parseUtcDate(record.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       confidence: Math.round(record.confidence * 100),
       emotion: record.final_emotion,
       engagement: record.engagement_level,
@@ -300,7 +301,7 @@ export const AnalyticsPage: React.FC = () => {
                   return (
                     <tr key={record.id} className="hover:bg-slate-900/40 transition-colors">
                       <td className="py-3 px-4 text-slate-400 font-mono">
-                        {new Date(record.timestamp).toLocaleString([], {
+                        {parseUtcDate(record.timestamp).toLocaleString([], {
                           month: "short",
                           day: "numeric",
                           hour: "2-digit",
