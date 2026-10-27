@@ -171,16 +171,57 @@ class FaceEmotionModel(BaseEmotionModel):
         # Feature-based scoring
         f = self._extract_facial_heuristics(features)
 
-        # Calibrated baseline scores: Neutral is dominant when resting,
-        # Happy triggers on significant mouth expansion/variance
+        brow  = f["brow_tension"]
+        m_mu  = f["mouth_mean"]       # mouth brightness (teeth/open mouth → high)
+        m_std = f["mouth_std"]        # mouth variance  (smile/expression → high)
+        e_var = f["eye_variance"]     # eye aperture    (wide eyes → high)
+
+        # ── Surprise ──
+        # Wide open eyes (e_var high) OR open mouth (m_mu high) → either signal alone triggers.
+        # Multiplicative form was blocking surprise when one feature was slightly below threshold.
+        eye_wide   = max(0.0, (e_var - 0.20) / 0.15)   # normalised [0,1]
+        mouth_open = max(0.0, (m_mu  - 0.28) / 0.20)   # normalised [0,1]
+        surprise_score = 0.06 + 2.5 * (0.55 * eye_wide + 0.45 * mouth_open)
+
+        # ── Happy ──
+        # Smile raises mouth std (corners lift) and often mouth brightness.
+        happy_score = 0.06 + 2.2 * max(0.0, (m_std - 0.18) / 0.15) \
+                           + 0.8 * max(0.0, (m_mu  - 0.30) / 0.20)
+
+        # ── Angry ──
+        # High brow tension (furrowed brows) + compressed mouth (low std)
+        angry_score = 0.06 + 2.0 * max(0.0, (brow - 0.14) / 0.10) \
+                           + 0.5 * max(0.0, (0.18 - m_std) / 0.18)
+
+        # ── Sad ──
+        # Low mouth brightness (down-turned corners) + flat brow
+        sad_score = 0.06 + 1.4 * max(0.0, (0.20 - m_mu) / 0.20) \
+                         + 0.6 * max(0.0, (0.12 - brow) / 0.12)
+
+        # ── Fear ──
+        # Wide eyes + brow raised/tense
+        fear_score = 0.05 + 1.5 * eye_wide * (1.0 + brow * 2.0) \
+                          + 0.5 * max(0.0, (brow - 0.18) / 0.10)
+
+        # ── Disgust ──
+        # Brow tension + compressed mouth (low variance)
+        disgust_score = 0.04 + 1.2 * max(0.0, (brow - 0.14) / 0.10) \
+                             * max(0.0, (0.20 - m_std) / 0.20)
+
+        # ── Neutral ──
+        # Dominant only when all signals are low — reduced baseline from 0.55 → 0.30
+        neutral_score = 0.30 + 0.25 * max(0.0, 1.0 - brow / 0.20) \
+                             * max(0.0, 1.0 - abs(m_mu - 0.25) / 0.25) \
+                             * max(0.0, 1.0 - e_var / 0.30)
+
         scores = {
-            "neutral": 0.55 + 0.3 * (0.20 - min(0.20, f["brow_tension"])),
-            "happy": 0.05 + 1.8 * max(0.0, f["mouth_std"] - 0.22),
-            "sad": 0.06 + 1.0 * max(0.0, 0.16 - f["mouth_mean"]),
-            "angry": 0.06 + 2.0 * max(0.0, f["brow_tension"] - 0.16),
-            "fear": 0.05 + 1.2 * max(0.0, f["eye_variance"] - 0.23) * (1.0 + f["brow_tension"]),
-            "surprise": 0.05 + 2.2 * max(0.0, f["eye_variance"] - 0.25) * max(0.0, f["mouth_mean"] - 0.35),
-            "disgust": 0.04 + 1.0 * max(0.0, f["brow_tension"] - 0.14) * max(0.0, 0.2 - f["mouth_std"]),
+            "neutral":  neutral_score,
+            "happy":    happy_score,
+            "sad":      sad_score,
+            "angry":    angry_score,
+            "fear":     fear_score,
+            "surprise": surprise_score,
+            "disgust":  disgust_score,
         }
 
         # Softmax normalization

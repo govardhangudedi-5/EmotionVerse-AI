@@ -10,7 +10,7 @@ import { checkHealth } from "./services/api";
 import { Navbar, NavTab } from "./components/Navbar";
 import { MedicalDisclaimer } from "./components/MedicalDisclaimer";
 
-// All 9 Pages
+// All pages
 import { Dashboard } from "./pages/Dashboard";
 import { LiveFace } from "./pages/LiveFace";
 import { TextEmotion } from "./pages/TextEmotion";
@@ -20,6 +20,8 @@ import { History } from "./pages/History";
 import { Evaluation } from "./pages/Evaluation";
 import { About } from "./pages/About";
 import { Privacy } from "./pages/Privacy";
+import { HealthcareSupport } from "./pages/HealthcareSupport";
+import { EducationSupport } from "./pages/EducationSupport";
 
 export const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<NavTab>("dashboard");
@@ -48,7 +50,11 @@ export const App: React.FC = () => {
       {/* Top Navigation */}
       <Navbar
         currentTab={currentTab}
-        setCurrentTab={setCurrentTab}
+        setCurrentTab={(tab) => {
+          setCurrentTab(tab);
+          if (tab === "healthcare") setContextMode("healthcare");
+          else if (tab === "education") setContextMode("education");
+        }}
         contextMode={contextMode}
         setContextMode={setContextMode}
         isBackendConnected={isBackendConnected}
@@ -63,7 +69,11 @@ export const App: React.FC = () => {
           <Dashboard
             contextMode={contextMode}
             setContextMode={setContextMode}
-            onNavigate={(tab) => setCurrentTab(tab)}
+          onNavigate={(tab) => {
+              setCurrentTab(tab);
+              if (tab === "healthcare") setContextMode("healthcare");
+              if (tab === "education") setContextMode("education");
+            }}
             faceResult={faceResult}
             setFaceResult={setFaceResult}
             audioResult={audioResult}
@@ -71,6 +81,10 @@ export const App: React.FC = () => {
             fusionResult={fusionResult}
           />
         )}
+
+        {currentTab === "healthcare" && <HealthcareSupport />}
+
+        {currentTab === "education" && <EducationSupport />}
 
         {currentTab === "live-face" && (
           <LiveFace

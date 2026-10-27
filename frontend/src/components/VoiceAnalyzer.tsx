@@ -348,6 +348,7 @@ export const VoiceAnalyzer: React.FC<VoiceAnalyzerProps> = ({ onResult, savedRes
         )}
       </div>
 
+
       {/* Result Indicator Footer */}
       {savedResult && (
         <div className="mt-3 pt-3 border-t border-slate-800/80 flex items-center justify-between">

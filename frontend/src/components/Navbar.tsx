@@ -20,6 +20,8 @@ import { ContextMode } from "../types/emotion";
 
 export type NavTab =
   | "dashboard"
+  | "healthcare"
+  | "education"
   | "live-face"
   | "text"
   | "voice"
@@ -48,6 +50,18 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const navItems: { id: NavTab; label: string; icon: React.ReactNode; badge?: string }[] = [
     { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard className="w-3.5 h-3.5" /> },
+    {
+      id: "healthcare",
+      label: "Healthcare",
+      icon: <HeartPulse className="w-3.5 h-3.5 text-rose-400" />,
+      badge: "NEW",
+    },
+    {
+      id: "education",
+      label: "Education",
+      icon: <GraduationCap className="w-3.5 h-3.5 text-blue-400" />,
+      badge: "NEW",
+    },
     {
       id: "live-face",
       label: "Live Face",

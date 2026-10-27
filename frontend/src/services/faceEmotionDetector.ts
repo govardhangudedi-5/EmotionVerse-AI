@@ -1,3 +1,4 @@
+// faceEmotionDetector.ts — v2.1 (surprise fix: OR-blend jaw+brow, neutral 0.40 baseline)
 import { EmotionType } from "../types/emotion";
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 
@@ -63,13 +64,13 @@ if (typeof window !== "undefined") {
 
 export class RealtimeFaceDetector {
   private prevSmoothed: Record<EmotionType, number> = {
-    neutral: 0.85,
-    happy: 0.03,
-    sad: 0.03,
-    angry: 0.03,
-    surprise: 0.03,
-    fear: 0.02,
-    disgust: 0.01,
+    neutral: 0.70,
+    happy: 0.10,
+    sad: 0.05,
+    angry: 0.05,
+    surprise: 0.05,
+    fear: 0.03,
+    disgust: 0.02,
   };
   private lastTimestamp = performance.now();
   private frameCount = 0;
@@ -404,8 +405,10 @@ export class RealtimeFaceDetector {
     const mouthStd = Math.sqrt(varSum / (mLen || 1));
 
     // A smile creates high mouth standard deviation (teeth / corner shadow separation)
-    const smileAU = mouthStd > 28 ? Math.min(1.0, (mouthStd - 28) / 22) : 0.0;
-    const jawOpenAU = mouthAvgLum < 38 && mouthStd < 20 ? 0.65 : 0.0;
+    // Lowered threshold: 28→18 so even a modest smile is detected
+    const smileAU = mouthStd > 18 ? Math.min(1.0, (mouthStd - 18) / 18) : 0.0;
+    // Laughing: jaw open detected when mouth region is dark (open cavity) with high variance
+    const jawOpenAU = mouthAvgLum < 55 && mouthStd > 15 ? Math.min(1.0, (55 - mouthAvgLum) / 40) : 0.0;
 
     const actionUnits = {
       smile: Math.round(smileAU * 100) / 100,
@@ -443,12 +446,13 @@ export class RealtimeFaceDetector {
 
   /**
    * Action Unit Mapping to 7 Canonical Emotions.
-   * Rock-solid calibration:
-   * - Neutral is dominant baseline (~85%) when face is resting.
-   * - Smile (AU12) > 0.20 immediately triggers Happy.
-   * - Jaw Open (AU26) > 0.35 triggers Surprise.
-   * - Brow Furrow (AU4) > 0.25 triggers Angry.
-   * - Mouth Frown (AU15) > 0.25 triggers Sad.
+   * Calibration guide:
+   * - Neutral dominant baseline (~60%) when face is resting.
+   * - Smile (AU12)     → Happy
+   * - Jaw Open (AU26) OR Brow Raise (AU1/2) → Surprise
+   * - Brow Furrow (AU4) → Angry
+   * - Mouth Frown (AU15) → Sad
+   * - Wide Eyes (AU5) + Brow Raise → Fear
    */
   private computeEmotionScoresFromAUs(au: {
     smile: number;
@@ -458,89 +462,107 @@ export class RealtimeFaceDetector {
     mouthFrown: number;
     eyeWide: number;
   }): Record<EmotionType, number> {
-    let neutralScore = 0.85;
-    let happyScore = 0.02;
-    let surpriseScore = 0.02;
-    let angryScore = 0.02;
-    let sadScore = 0.02;
-    let fearScore = 0.01;
-    let disgustScore = 0.01;
+    // Neutral baseline: 0.50 — strong enough to win on a resting face,
+    // but yields to genuine emotion signals (smile, jaw-drop, furrow, frown).
+    let neutralScore  = 0.50;
+    let happyScore    = 0.04;
+    let surpriseScore = 0.04;
+    let angryScore    = 0.03;
+    let sadScore      = 0.03;
+    let fearScore     = 0.02;
+    let disgustScore  = 0.02;
 
-    // 1. HAPPY (Smile AU12)
-    // If the person is smiling, boost Happy and lower Neutral
-    if (au.smile > 0.18) {
-      happyScore = 0.25 + 3.2 * Math.pow(au.smile, 1.3);
-      neutralScore = Math.max(0.04, neutralScore - au.smile * 2.0);
+    // ── 1. HAPPY (Smile AU12) — sensitive, triggers on subtle smiles ──
+    if (au.smile > 0.05) {
+      happyScore    = 0.40 + 4.5 * Math.pow(au.smile, 0.9);
+      neutralScore  = Math.max(0.04, neutralScore - au.smile * 3.0);
+      angryScore    = 0.01; // smiling cancels anger
+      sadScore      = 0.01;
     }
 
-    // 2. SURPRISE (Jaw Open AU26 - requires actual open mouth drop)
-    if (au.jawOpen > 0.35 && au.smile < 0.25) {
-      surpriseScore = 0.25 + 2.8 * au.jawOpen;
-      neutralScore = Math.max(0.04, neutralScore - au.jawOpen * 1.8);
+    // ── 1b. LAUGHING (jaw open + smile = dominant happy) ──
+    if (au.jawOpen > 0.20 && au.smile > 0.05) {
+      happyScore   = Math.max(happyScore, 0.70 + 2.0 * au.smile + 1.5 * au.jawOpen);
+      neutralScore = Math.max(0.04, neutralScore - 0.55);
+      angryScore   = 0.01;
+      sadScore     = 0.01;
     }
 
-    // 3. ANGRY (Brow Furrow AU4)
-    if (au.browFurrow > 0.28 && au.smile < 0.20) {
-      angryScore = 0.25 + 3.0 * au.browFurrow;
-      neutralScore = Math.max(0.04, neutralScore - au.browFurrow * 1.8);
+    // ── 2. SURPRISE ──
+    // MediaPipe jaw values rarely hit 0.40+ at rest; threshold was too strict.
+    // Both jaw drop AND raised brows are valid surprise signals — use OR blend.
+    //   Jaw open (AU26) alone → dropped jaw surprise
+    //   Brow raise (AU1+2) alone → wide-eyed raised-brow surprise
+    //   Both together → strong surprise
+    const jawSurprise  = Math.max(0, (au.jawOpen  - 0.12) / 0.25);  // normalised [0,1]
+    const browSurprise = Math.max(0, (au.browRaise - 0.15) / 0.25);  // normalised [0,1]
+    const eyeSurprise  = Math.max(0, (au.eyeWide   - 0.20) / 0.30);  // normalised [0,1]
+
+    // OR-style: either jaw OR brows alone gives surprise; both together amplifies it
+    const surpriseSignal = Math.min(1.0,
+      0.50 * jawSurprise +
+      0.35 * browSurprise +
+      0.15 * eyeSurprise
+    );
+
+    if (surpriseSignal > 0.08 && au.smile < 0.10) {
+      surpriseScore = 0.15 + 3.2 * surpriseSignal;
+      neutralScore  = Math.max(0.04, neutralScore - surpriseSignal * 2.0);
     }
 
-    // 4. SAD (Mouth Frown AU15)
-    if (au.mouthFrown > 0.28 && au.smile < 0.15) {
-      sadScore = 0.25 + 2.4 * au.mouthFrown;
+    // ── 3. ANGRY (Brow Furrow AU4) ──
+    // Threshold raised back to 0.42 — natural resting brow tension sits around 0.15-0.28.
+    // Require secondary confirmation: either meaningful mouthFrown OR very deep furrow alone.
+    const deepFurrow = au.browFurrow > 0.42 && au.smile < 0.08;
+    const confirmedAngry = deepFurrow && (au.mouthFrown > 0.08 || au.browFurrow > 0.55);
+    if (confirmedAngry) {
+      angryScore   = 0.20 + 2.8 * au.browFurrow;
+      neutralScore = Math.max(0.04, neutralScore - au.browFurrow * 1.6);
+    }
+
+    // ── 4. SAD (Mouth Frown AU15) ──
+    if (au.mouthFrown > 0.25 && au.smile < 0.08) {
+      sadScore     = 0.20 + 2.4 * au.mouthFrown;
       neutralScore = Math.max(0.04, neutralScore - au.mouthFrown * 1.6);
     }
 
-    // 5. FEAR (Wide Eyes + Brow Raise)
-    if (au.eyeWide > 0.40 && au.browRaise > 0.35 && au.smile < 0.2) {
-      fearScore = 0.20 + 2.2 * (au.eyeWide + au.browRaise);
-      neutralScore = Math.max(0.04, neutralScore - 0.6);
+    // ── 5. FEAR (Wide Eyes + Brow Raise — lowered to 0.35 each) ──
+    if (au.eyeWide > 0.35 && au.browRaise > 0.30 && au.smile < 0.10) {
+      fearScore    = 0.20 + 2.0 * (au.eyeWide + au.browRaise);
+      neutralScore = Math.max(0.04, neutralScore - 0.5);
     }
 
-    // 6. DISGUST (Brow Furrow + Frown)
-    if (au.browFurrow > 0.40 && au.mouthFrown > 0.30) {
+    // ── 6. DISGUST (strong brow furrow + frown, no smile) ──
+    if (au.browFurrow > 0.45 && au.mouthFrown > 0.35 && au.smile < 0.08) {
       disgustScore = 0.20 + 1.8 * (au.browFurrow + au.mouthFrown);
       neutralScore = Math.max(0.04, neutralScore - 0.5);
     }
 
-    // Softmax normalization
+    // Softmax normalization — temperature 2.0 for clear winner
     const rawScores = {
-      happy: happyScore,
-      neutral: neutralScore,
+      happy:    happyScore,
+      neutral:  neutralScore,
       surprise: surpriseScore,
-      sad: sadScore,
-      angry: angryScore,
-      fear: fearScore,
-      disgust: disgustScore,
+      sad:      sadScore,
+      angry:    angryScore,
+      fear:     fearScore,
+      disgust:  disgustScore,
     };
 
     let total = 0;
     const expScores: Record<EmotionType, number> = {
-      happy: 0,
-      sad: 0,
-      angry: 0,
-      fear: 0,
-      surprise: 0,
-      disgust: 0,
-      neutral: 0,
+      happy: 0, sad: 0, angry: 0, fear: 0, surprise: 0, disgust: 0, neutral: 0,
     };
 
     const keys = Object.keys(rawScores) as EmotionType[];
     for (const k of keys) {
-      expScores[k] = Math.exp(rawScores[k] * 3.0);
+      expScores[k] = Math.exp(rawScores[k] * 2.0);
       total += expScores[k];
     }
 
     const probs: Record<EmotionType, number> = {
-      happy: 0,
-      sad: 0,
-      angry: 0,
-      fear: 0,
-      surprise: 0,
-      disgust: 0,
-      neutral: 0,
+      happy: 0, sad: 0, angry: 0, fear: 0, surprise: 0, disgust: 0, neutral: 0,
     };
-
     for (const k of keys) {
       probs[k] = Math.round((expScores[k] / total) * 1000) / 1000;
     }

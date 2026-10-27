@@ -39,6 +39,105 @@
 
 ---
 
+---
+
+## Healthcare & Education Application Workflows
+
+EmotionVerse AI is designed around **two primary application areas**. Each has its own dedicated module accessible from the dashboard and the navigation bar.
+
+---
+
+### 🏥 Healthcare Emotion Support
+
+**Purpose:** Support patient–clinician communication. Not a diagnostic tool.
+
+**Workflow:**
+
+| Step | Action | Detail |
+|------|--------|--------|
+| 1 | Open **Healthcare Support** tab | Click from the dashboard or navbar |
+| 2 | (Optional) Start Camera | Enable live facial expression analysis — requires camera permission |
+| 3 | Enter patient message | e.g. *"I am worried about my upcoming treatment."* |
+| 4 | Click **Analyze Text** | The NLP model analyzes the full sentence meaning, not keyword matching |
+| 5 | (Optional) Record Voice | Start → Stop → click **Analyze Voice** for acoustic prosody prediction |
+| 6 | View combined estimate | Fusion panel shows individual modality scores + combined confidence |
+| 7 | Read communication suggestions | e.g. *"Consider asking the patient about concerns regarding their treatment."* |
+| 8 | Save to session | Click **Save to Session** to log the interaction for review |
+| 9 | Review or clear history | Expand **Patient Session History** to review or **Clear** all data |
+
+**Key constraints:**
+- Does **not** diagnose depression, anxiety, or any medical condition
+- Suggestions are communication prompts, not clinical orders
+- Emotion predictions are estimates — they may be incorrect
+- Camera and microphone are always optional and require explicit permission
+- No raw video or audio is permanently stored
+
+---
+
+### 🎓 Education Emotion Support
+
+**Purpose:** Support personalised learning for students. Not for grading or discipline.
+
+**Workflow:**
+
+| Step | Action | Detail |
+|------|--------|--------|
+| 1 | Open **Education Support** tab | Click from the dashboard or navbar |
+| 2 | (Optional) Start Camera | Enable live facial analysis during the session — always optional |
+| 3 | Enter student feedback | e.g. *"I have read this chapter three times but still cannot understand it."* |
+| 4 | Click **Analyze Feedback** | NLP model analyzes sentence context, not just isolated keywords |
+| 5 | (Optional) Record Voice | Record spoken feedback for acoustic analysis |
+| 6 | View combined estimate | Individual modality scores + multimodal confidence shown separately |
+| 7 | Read learning suggestions | e.g. *Simplify the explanation / Show step-by-step example / Invite student to ask for help* |
+| 8 | Save to session | Log the interaction in the learning session history |
+| 9 | Enable Teacher View | Requires explicit student consent — shows summary without raw data |
+| 10 | Clear session | Clears all data including teacher-view consent |
+
+**Learning support suggestion types:**
+- **Confusion / difficulty detected** → Simplify, step-by-step example, practice exercise, invite help
+- **Frustration detected** → Acknowledge, try different format, suggest short break
+- **Positive progress detected** → Extend with challenge, celebrate progress
+- **Neutral / general** → Check comprehension, invite questions, set next step
+
+**Key constraints:**
+- Does **not** assess student intelligence, effort, or character
+- Facial expressions alone are **never** used to infer boredom or confusion
+- Learning suggestions are based **primarily** on explicit student text feedback
+- Results must **not** be used for grading, assessment, or discipline
+- Teacher view requires student consent and is never automatic
+
+---
+
+### Multimodal Fusion — How It Works
+
+Both modules use the same fusion engine:
+
+```
+Final emotion = Σ (available modality predictions × normalized weight)
+```
+
+- **Weights** are equal by default (⅓ each) and auto-normalized when a modality is missing
+- The fused result **recalculates live** as new predictions arrive (e.g., when facial expression changes)
+- **Confidence** is the model's probability for the top predicted emotion class — not an accuracy guarantee
+- **Agreement score** measures how consistently the active modalities agree
+
+---
+
+### Privacy & Safety Summary
+
+| Concern | Protection |
+|---------|-----------|
+| Camera access | Requires explicit browser permission; optional in all modules |
+| Microphone access | Requires explicit browser permission; optional |
+| Raw video storage | Never permanently stored by default |
+| Raw audio storage | Never permanently stored by default |
+| Session data | Cleared on user request; in-memory only during session |
+| Medical decisions | Explicitly prohibited — tool is advisory only |
+| Student data | Teacher view requires student consent |
+| Grading / discipline | Explicitly prohibited by design |
+
+---
+
 ## 1. Abstract
 
 Single-channel emotion recognition frequently fails due to facial masking, acoustic background noise, or textual sarcasm. **EmotionVerse AI** unifies computer vision, audio signal processing, and natural language understanding into a cohesive multimodal architecture. Most importantly, it implements **continuous live webcam expression detection** running at 25–30 FPS with zero-latency client-side facial Action Unit evaluation and exponential smoothing, automatically updating the displayed emotion as a person's expression naturally transitions (Neutral $\to$ Happy $\to$ Angry $\to$ Surprise $\to$ Sad).

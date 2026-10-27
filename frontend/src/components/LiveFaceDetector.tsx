@@ -15,7 +15,7 @@ import {
   Square,
 } from "lucide-react";
 import { EmotionType, EMOTION_META, FaceAnalysisResponse } from "../types/emotion";
-import { realtimeDetector, FaceDetectionResult } from "../services/faceEmotionDetector";
+import { realtimeDetector, FaceDetectionResult } from "../services/faceEmotionDetector"; // v2.1
 import { analyzeFaceBase64 } from "../services/api";
 
 interface LiveFaceDetectorProps {
