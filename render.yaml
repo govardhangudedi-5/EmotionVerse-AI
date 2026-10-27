@@ -1,12 +1,11 @@
 services:
-  # 1. FastAPI Backend — Docker runtime (Dockerfile in /backend)
+  # 1. FastAPI Backend — Docker build from repo root
   - type: web
     name: emotionverse-backend
     runtime: docker
     region: oregon
     plan: free
     branch: main
-    rootDir: backend
     dockerfilePath: ./Dockerfile
     envVars:
       - key: APP_NAME
